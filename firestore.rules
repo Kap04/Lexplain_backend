@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /documents/{documentId} {
+      // Document now stores full content (not just GCS path)
+      allow read, write: if request.auth != null && resource.data.ownerId == request.auth.uid;
+    }
+    match /chunks/{chunkId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only backend writes
+    }
+    match /summaries/{summaryId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /qa_sessions/{qaId} {
+      allow read, write: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+  }
+}
