@@ -63,7 +63,7 @@ def get_qa_sessions_by_user(db: firestore.Client, user_id: str):
     sessions = []
     try:
         docs = db.collection(COLLECTION_QA)\
-                .where(filter=("userId", "==", user_id))\
+                .where("userId", "==", user_id)\
                 .order_by("createdAt", direction=firestore.Query.DESCENDING)\
                 .stream()
         
@@ -132,7 +132,7 @@ def delete_qa_session(db: firestore.Client, session_id: str):
 def get_summary_by_doc_id(db: firestore.Client, doc_id: str):
     """Get document summary by document ID."""
     try:
-        docs = db.collection(COLLECTION_SUMMARIES).where(filter=("documentId", "==", doc_id)).stream()
+        docs = db.collection(COLLECTION_SUMMARIES).where("documentId", "==", doc_id).stream()
         for doc in docs:
             return doc.to_dict()
     except Exception as e:
@@ -147,7 +147,7 @@ def get_chunks_by_doc_id(db: firestore.Client, doc_id: str):
     """
     chunks = []
     try:
-        docs = db.collection(COLLECTION_CHUNKS).where(filter=("documentId", "==", doc_id)).stream()
+        docs = db.collection(COLLECTION_CHUNKS).where("documentId", "==", doc_id).stream()
 
         for doc in docs:
             data = doc.to_dict()
