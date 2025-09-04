@@ -380,51 +380,78 @@ def _clean_message_for_response(message: Dict[str, Any]) -> Dict[str, Any]:
     return cleaned
 
 
-# @app.post("/api/upload/content")
-# async def upload_document_content(
-#     file: UploadFile = File(...),
-#     user=Depends(verify_firebase_token)
-# ):
-#     print(f"Uploading document: {file.filename} for user: {user['uid']}")
-#     content = await file.read()
+def extract_text_from_pdf(content) -> tuple[str, str]:
+    """
+    Extract text from PDF content using PyMuPDF
     
-#     try:
-#         # Use OCR-aware text extraction
-#         extracted_text, extraction_method = extract_text_with_ocr_support(content, file.filename)
+    Returns:
+        tuple: (extracted_text, extraction_method)
+    """
+    try:
+        # Use the existing extract_pages_from_pdf_content function
+        pages = extract_pages_from_pdf_content(content)
+        extracted_text = "\n\n".join(page["text"] for page in pages)
         
-#         # Truncate content if too large for Firestore
-#         original_length = len(extracted_text)
-#         extracted_text = truncate_content_for_firestore(extracted_text)
+        # Check if we got meaningful text
+        text_quality = len(extracted_text.strip().replace('\n', '').replace(' ', ''))
         
-#         if len(extracted_text) < original_length:
-#             print(f"⚠️ Content truncated from {original_length} to {len(extracted_text)} characters for Firestore storage")
+        if text_quality > 50:  # Reasonable text extraction
+            print(f"✅ PDF text extraction successful: {text_quality} characters")
+            return extracted_text, "pdf_text_extraction"
+        else:
+            print(f"⚠️ Poor text extraction ({text_quality} chars)")
+            return "Error: Document appears to contain no readable text or may be image-based", "extraction_failed"
+            
+    except Exception as e:
+        print(f"❌ PDF text extraction failed: {e}")
+        return f"Error: Could not extract text from document - {str(e)}", "extraction_failed"
+
+
+@app.post("/api/upload/content")
+async def upload_document_content(
+    file: UploadFile = File(...),
+    user=Depends(verify_firebase_token)
+):
+    print(f"Uploading document: {file.filename} for user: {user['uid']}")
+    content = await file.read()
+    
+    try:
+        # Extract text from PDF
+        extracted_text, extraction_method = extract_text_from_pdf(content)
         
-#         print(f"✅ Text extraction successful using {extraction_method}. Preview: {extracted_text[:200]}")
-#     except Exception as e:
-#         print(f"❌ All text extraction methods failed: {e}. Using fallback.")
-#         extracted_text = "Error: Could not extract text from document"
-#         extraction_method = "extraction_failed"
+        # Truncate content if too large for Firestore
+        original_length = len(extracted_text)
+        extracted_text = truncate_content_for_firestore(extracted_text)
+        
+        if len(extracted_text) < original_length:
+            print(f"⚠️ Content truncated from {original_length} to {len(extracted_text)} characters for Firestore storage")
+        
+        print(f"✅ Text extraction successful using {extraction_method}. Preview: {extracted_text[:200]}")
+    except Exception as e:
+        print(f"❌ Text extraction failed: {e}. Using fallback.")
+        extracted_text = "Error: Could not extract text from document"
+        extraction_method = "extraction_failed"
 
-#     doc = {
-#         "ownerId": user["uid"],
-#         "filename": file.filename,
-#         "status": "uploaded",
-#         "createdAt": firestore.SERVER_TIMESTAMP,
-#         "documentContent": extracted_text,
-#         "extractionMethod": extraction_method,  # Track how text was extracted
-#     }
-#     doc_id = add_document_metadata(db, doc)  # Pass db
-#     print(f"Document stored with ID: {doc_id}")
+    doc = {
+        "ownerId": user["uid"],
+        "filename": file.filename,
+        "status": "uploaded",
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "documentContent": extracted_text,
+        "extractionMethod": extraction_method,  # Track how text was extracted
+    }
+    doc_id = add_document_metadata(db, doc)  # Pass db
+    print(f"Document stored with ID: {doc_id}")
 
-#     # --- Start processing in background so embeddings are created immediately ---
-#     try:
-#         t = threading.Thread(target=_process_document_sync, args=(doc_id, user["uid"]), daemon=True)
-#         t.start()
-#         print(f"Background processing thread started for {doc_id}")
-#     except Exception as e:
-#         print(f"Failed to start background thread for processing: {e}")
+    # --- Start processing in background so embeddings are created immediately ---
+    try:
+        t = threading.Thread(target=_process_document_sync, args=(doc_id, user["uid"]), daemon=True)
+        t.start()
+        print(f"Background processing thread started for {doc_id}")
+    except Exception as e:
+        print(f"Failed to start background thread for processing: {e}")
 
-#     return {"document_id": doc_id, "status": "uploaded", "extraction_method": extraction_method}
+    return {"document_id": doc_id, "status": "uploaded", "extraction_method": extraction_method}
 
 
 
